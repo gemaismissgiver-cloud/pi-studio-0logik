@@ -1,0 +1,6 @@
+{
+  "name": "PI Studio 0-Logik",
+  "description": "Programmierte Intelligenz (PI) mit -0+ Logik, Open-Source Transformer Fine-Tuning Studio, multimodalen Analyse-Werkzeugen und Motorola 13 PWA/APK-Optimierung.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
