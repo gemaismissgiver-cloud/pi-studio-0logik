@@ -26,15 +26,22 @@ import {
   Activity,
   Sliders,
   Send,
-  Code2
+  Code2,
+  Wrench,
+  X,
+  Info,
+  Globe,
+  KeyRound
 } from 'lucide-react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
+import { PIBuildDoctorAgent } from './PIBuildDoctorAgent';
+import { APKBuildDoctor } from './APKBuildDoctor';
 
 export const PIBuildAPKStudio: React.FC = () => {
   const { isInstallable, isInstalled, install } = usePWAInstall();
 
   // Navigation Sub-Tabs
-  const [activeSubTab, setActiveSubTab] = useState<'buildrun' | 'github' | 'apk'>('buildrun');
+  const [activeSubTab, setActiveSubTab] = useState<'buildrun' | 'doctor' | 'apkdoctor' | 'github' | 'apk'>('buildrun');
 
   // Build & Run State
   const [building, setBuilding] = useState(false);
@@ -65,6 +72,23 @@ export const PIBuildAPKStudio: React.FC = () => {
   const [activeCodeTab, setActiveCodeTab] = useState<'manifest' | 'gradle' | 'capacitor'>('manifest');
   const [copiedCode, setCopiedCode] = useState(false);
   const [lastDownloadedFile, setLastDownloadedFile] = useState<string | null>(null);
+  const [showPwaModal, setShowPwaModal] = useState(false);
+  const [showTokenHelpModal, setShowTokenHelpModal] = useState(false);
+
+  const handleInstallClick = async () => {
+    if (isInstallable) {
+      try {
+        const success = await install();
+        if (!success) {
+          setShowPwaModal(true);
+        }
+      } catch {
+        setShowPwaModal(true);
+      }
+    } else {
+      setShowPwaModal(true);
+    }
+  };
 
   const manifestXml = `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -325,7 +349,7 @@ android {
           </div>
 
           {/* Sub-Tab Switcher */}
-          <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-mono">
+          <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-mono flex-wrap">
             <button
               onClick={() => setActiveSubTab('buildrun')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
@@ -336,6 +360,34 @@ android {
             >
               <Zap className="w-3.5 h-3.5" />
               <span>Build &amp; Run Flow</span>
+            </button>
+            <button
+              onClick={() => setActiveSubTab('doctor')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                activeSubTab === 'doctor'
+                  ? 'bg-gradient-to-r from-red-500 via-amber-500 to-emerald-500 text-slate-950 font-bold shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Wrench className="w-3.5 h-3.5" />
+              <span>0-Logik Build-Doktor</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-slate-900 text-cyan-300 border border-slate-700">
+                Agent
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveSubTab('apkdoctor')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                activeSubTab === 'apkdoctor'
+                  ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-slate-950 font-bold shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>APK-Doktor</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-slate-900 text-emerald-300 border border-slate-700">
+                Parse-Check
+              </span>
             </button>
             <button
               onClick={() => setActiveSubTab('github')}
@@ -420,12 +472,22 @@ android {
 
             {/* Terminal Build Logs Box */}
             <div className="bg-slate-950 rounded-xl border border-slate-800 p-3.5 space-y-2">
-              <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 border-b border-slate-800/80 pb-1.5">
+              <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 border-b border-slate-800/80 pb-1.5 flex-wrap gap-2">
                 <span className="flex items-center gap-1.5 text-cyan-300 font-bold">
                   <Terminal className="w-3.5 h-3.5 text-cyan-400" />
                   BUILD OUTPUT &amp; KORTEX PIPELINE
                 </span>
-                <span className="text-slate-500">432 Hz Resonanz · 0 Raten</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setActiveSubTab('doctor')}
+                    className="flex items-center gap-1 text-[10px] font-mono text-cyan-300 hover:text-white px-2 py-0.5 rounded bg-slate-900 border border-cyan-800/60 hover:border-cyan-500 cursor-pointer transition"
+                    title="0-Logik Fehler-Agent öffnen"
+                  >
+                    <Wrench className="w-3 h-3 text-cyan-400" />
+                    <span>Fehler im Build-Doktor prüfen</span>
+                  </button>
+                  <span className="text-slate-500 text-[10px]">432 Hz Resonanz · 0 Raten</span>
+                </div>
               </div>
 
               <div className="space-y-1 font-mono text-xs max-h-36 overflow-y-auto">
@@ -644,6 +706,24 @@ android {
         )}
 
         {/* ══════════════════════════════════════════════════════
+            SUB-TAB: 0-LOGIK BUILD-DOKTOR & FEHLER-AGENT
+        ══════════════════════════════════════════════════════ */}
+        {activeSubTab === 'doctor' && (
+          <div className="space-y-4 animate-in fade-in">
+            <PIBuildDoctorAgent />
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════
+            SUB-TAB: APK BUILD-DOKTOR & PARSE-DIAGNOSE (MOTOROLA 13)
+        ══════════════════════════════════════════════════════ */}
+        {activeSubTab === 'apkdoctor' && (
+          <div className="space-y-4 animate-in fade-in">
+            <APKBuildDoctor />
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════
             SUB-TAB 2: GITHUB STUDIO (DIREKT-UPLOAD & SYNC)
         ══════════════════════════════════════════════════════ */}
         {activeSubTab === 'github' && (
@@ -798,6 +878,58 @@ android {
               </div>
             </div>
 
+            {/* ── WORKFLOW & SECRETS DOWNLOAD CARD ── */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/40 border border-purple-500/40 space-y-3 font-mono text-xs shadow-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-purple-950/80 text-purple-400 border border-purple-500/30">
+                    <Code2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white text-sm">
+                      CI/CD Pipeline (.github/workflows/main.yml) &amp; Secrets
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Firebase Deployment · Motorola 13 APK Keystore Signierung · 0-Logik Engine
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-700">
+                    Firebase Ready
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-700">
+                    Keystore Signed
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-slate-300 text-xs leading-relaxed">
+                Das Skript <code className="text-purple-300 bg-slate-900 px-1.5 py-0.5 rounded">scripts/setup-github-ci.ts</code> hat den optimierten Produktions-Workflow erstellt. Lade die Dateien direkt herunter oder synchronisiere sie per 1-Klick mit deinem GitHub-Repository:
+              </p>
+
+              <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-1">
+                <a
+                  href="/api/export/main.yml"
+                  download="main.yml"
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md transition"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>main.yml herunterladen</span>
+                </a>
+
+                <a
+                  href="/api/export/github-secrets-guide.md"
+                  download="GITHUB_SECRETS_GUIDE.md"
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-cyan-300 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition"
+                >
+                  <FileCode className="w-4 h-4" />
+                  <span>Secrets-Anleitung (.MD) laden</span>
+                </a>
+              </div>
+            </div>
+
             {/* Alternative: Manual Git Terminal Instructions */}
             <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 font-mono text-xs">
               <div className="flex items-center justify-between text-slate-400">
@@ -884,17 +1016,26 @@ git push -u origin main`}
               </div>
 
               {/* Parsing Error Note */}
-              <div className="p-3 rounded-xl bg-slate-900/90 border border-cyan-800/60 flex items-start gap-2.5 text-xs font-mono">
-                <HelpCircle className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <span className="text-cyan-300 font-bold">
-                    Warum meldet Android manchmal „Beim Parsen des Pakets ist ein Problem aufgetreten“?
-                  </span>
-                  <p className="text-slate-300 text-[11px] leading-relaxed">
-                    Android 13/14 verlangt für Sideload-APKs eine aktivierte Berechtigung für unbekannte Quellen (<code className="text-cyan-300">Einstellungen → Apps → Spezieller App-Zugriff → Unbekannte Apps installieren</code>). 
-                    <strong> Die beste und einfachste Lösung:</strong> Nutze unten <strong className="text-emerald-400">Methode 1 (1-Klick Installation)</strong> — dein Motorola-Browser erzeugt das APK dabei <em>vollautomatisch und nativ</em> ohne jeden Parsing-Fehler!
-                  </p>
+              <div className="p-3.5 rounded-xl bg-slate-900/90 border border-cyan-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono">
+                <div className="flex items-start gap-2.5">
+                  <HelpCircle className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="text-cyan-300 font-bold">
+                      Warum meldet Android manchmal „Beim Parsen des Pakets ist ein Problem aufgetreten“?
+                    </span>
+                    <p className="text-slate-300 text-[11px] leading-relaxed">
+                      Android 13/14 verlangt strikte <code>android:exported=&quot;true&quot;</code> Flags, Signature Scheme v2 und Sideload-Rechte.
+                    </p>
+                  </div>
                 </div>
+
+                <button
+                  onClick={() => setActiveSubTab('apkdoctor')}
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-md active:scale-95 transition shrink-0"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>APK-Doktor Checkliste öffnen</span>
+                </button>
               </div>
             </div>
 
@@ -933,26 +1074,36 @@ git push -u origin main`}
                   </p>
                 </div>
 
-                <div className="pt-2">
-                  {isInstalled ? (
-                    <div className="w-full py-2.5 rounded-xl bg-cyan-950 border border-cyan-700 text-cyan-300 font-mono text-xs font-bold text-center flex items-center justify-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-cyan-400" />
-                      <span>Auf Motorola 13 installiert</span>
-                    </div>
-                  ) : isInstallable ? (
-                    <button
-                      onClick={install}
-                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-mono text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95 transition"
-                    >
-                      <Smartphone className="w-4 h-4" />
-                      <span>Jetzt nativ installieren</span>
-                    </button>
-                  ) : (
-                    <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] font-mono text-slate-300 space-y-1">
-                      <p className="font-bold text-cyan-300">In Brave / Chrome:</p>
-                      <p>Tippe auf Menü (3 Punkte ⋮) → <strong>&quot;App installieren&quot;</strong>.</p>
-                    </div>
-                  )}
+                <div className="pt-2 space-y-2">
+                  <button
+                    onClick={handleInstallClick}
+                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-mono text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95 transition"
+                  >
+                    {isInstalled ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-950" />
+                        <span>✓ Auf Motorola 13 aktiv (Optionen öffnen)</span>
+                      </>
+                    ) : isInstallable ? (
+                      <>
+                        <Smartphone className="w-4 h-4" />
+                        <span>Jetzt auf Motorola 13 installieren</span>
+                      </>
+                    ) : (
+                      <>
+                        <Smartphone className="w-4 h-4" />
+                        <span>Auf Motorola 13 installieren (Anleitung)</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => window.open(window.location.href, '_blank')}
+                    className="w-full py-2 px-3 rounded-xl bg-slate-950/80 hover:bg-slate-900 border border-cyan-800/60 text-cyan-300 font-mono text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>In eigenem Vollbild-Tab öffnen</span>
+                  </button>
                 </div>
               </div>
 
@@ -1088,6 +1239,110 @@ git push -u origin main`}
           </div>
         )}
       </div>
+
+      {/* ── INTERACTIVE MOTOROLA 13 INSTALLATION & BRAVE/CHROME MODAL ── */}
+      {showPwaModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-cyan-500/50 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 shadow-2xl shadow-cyan-950/60 font-mono space-y-4">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-cyan-950 border border-cyan-500/40 text-cyan-400">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white">
+                    PI Studio auf Motorola 13 installieren
+                  </h3>
+                  <p className="text-[11px] text-cyan-300">
+                    Natives Android WebAPK · 0-Logik Kortex
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPwaModal(false)}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white cursor-pointer transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Step-by-Step Instructions */}
+            <div className="space-y-3 text-xs">
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                <span className="text-cyan-400 font-bold flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4" />
+                  So installierst du es in 2 Schritten (Brave oder Chrome):
+                </span>
+                <ol className="text-slate-300 space-y-2 text-[11px] list-decimal list-inside leading-relaxed">
+                  <li>
+                    Tippe oben rechts im Browser auf die <strong className="text-white">3 Punkte (⋮)</strong>.
+                  </li>
+                  <li>
+                    Wähle den Menüpunkt <strong className="text-cyan-300">„App installieren“</strong> (oder <strong className="text-cyan-300">„Zum Startbildschirm hinzufügen“</strong>).
+                  </li>
+                  <li>
+                    Bestätige mit <strong className="text-emerald-400">„Installieren“</strong>. Dein Motorola 13 baut die App automatisch ein und sie erscheint wie jede normale App im App-Drawer!
+                  </li>
+                </ol>
+              </div>
+
+              {/* Brave Shield & Cookie Check Explanation */}
+              <div className="p-3 rounded-xl bg-amber-950/50 border border-amber-500/40 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-amber-300 font-bold">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>Brave Browser: „Action required / Cookie check“?</span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  Wenn Brave diesen roten Kreis anzeigt, blockiert <strong>Brave Shields</strong> den Google-Sicherheits-Cookie.
+                </p>
+                <ul className="text-[11px] text-amber-200/90 list-disc list-inside space-y-1">
+                  <li>
+                    <strong>Lösung 1:</strong> Tippe auf den Button <span className="underline">„Authenticate in new window“</span>.
+                  </li>
+                  <li>
+                    <strong>Lösung 2 (Empfohlen):</strong> Tippe oben rechts auf das <span className="text-white font-bold">Löwen-Symbol (Brave Shields)</span> und schalte den Schutz für diese Seite kurz auf <strong className="text-emerald-300">AUS</strong>.
+                  </li>
+                  <li>
+                    <strong>Lösung 3:</strong> Öffne den Link einfach in <strong>Google Chrome</strong>.
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
+              <button
+                onClick={() => window.open(window.location.href, '_blank')}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95 transition"
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>In eigenem Tab / Vollbild öffnen</span>
+              </button>
+
+              {isInstallable && (
+                <button
+                  onClick={async () => {
+                    await install();
+                    setShowPwaModal(false);
+                  }}
+                  className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition active:scale-95"
+                >
+                  <Smartphone className="w-4 h-4" />
+                  <span>Dialog starten</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => setShowPwaModal(false)}
+                className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs cursor-pointer transition"
+              >
+                Schließen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
