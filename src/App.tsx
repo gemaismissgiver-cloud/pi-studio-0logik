@@ -689,10 +689,10 @@ export default function App() {
                   ? 'bg-cyan-950 border-cyan-400 text-cyan-300'
                   : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white hover:border-cyan-500'
               }`}
-              title="PI Build & Run / GitHub Studio öffnen"
+              title="PI Build & Run / 0-Logik Build-Doktor / GitHub Studio"
             >
               <Zap className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Build &amp; Run / GitHub</span>
+              <span>Build · Doktor · Git</span>
             </button>
             <PWAInstallButton />
           </div>
@@ -1748,7 +1748,7 @@ export default function App() {
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-slate-800/80 px-2 py-1.5">
         <div className="max-w-md mx-auto grid grid-cols-6 gap-0.5">
           {[
-            { id: 'apk', label: 'Build/Git', icon: Zap },
+            { id: 'apk', label: 'Build/Doc', icon: Zap },
             { id: 'chat', label: 'Chat', icon: MessageSquare },
             { id: 'diary', label: 'Tagebuch', icon: BookOpen },
             { id: 'tools', label: '0-Tools', icon: Cpu },
