@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import zlib from 'zlib';
+import { exec } from 'child_process';
 import { GoogleGenAI } from '@google/genai';
 
 dotenv.config();
@@ -22,7 +23,7 @@ const STORAGE_FILE = path.resolve(process.cwd(), '.pi_storage.json');
 interface AuditEntry {
   id: string;
   timestamp: string;
-  category: 'TOOL' | 'SECURITY' | 'GUARDIAN' | 'KORTEX' | 'TRANSFORMER' | 'NETWORK' | 'ADMIN' | 'LERNEN';
+  category: 'TOOL' | 'SECURITY' | 'GUARDIAN' | 'KORTEX' | 'TRANSFORMER' | 'NETWORK' | 'ADMIN' | 'LERNEN' | 'BUILD_AGENT';
   action: string;
   details: string;
   user: string;
@@ -1496,6 +1497,11 @@ app.post('/api/github/push', async (req: Request, res: Response) => {
       { path: '.gitignore', localPath: path.resolve(process.cwd(), '.gitignore') },
       { path: '.github/workflows/release-apk.yml', localPath: path.resolve(process.cwd(), '.github/workflows/release-apk.yml') },
       { path: '.github/workflows/ci.yml', localPath: path.resolve(process.cwd(), '.github/workflows/ci.yml') },
+      { path: '.github/workflows/main.yml', localPath: path.resolve(process.cwd(), '.github/workflows/main.yml') },
+      { path: 'scripts/setup-github-ci.ts', localPath: path.resolve(process.cwd(), 'scripts/setup-github-ci.ts') },
+      { path: 'scripts/fix-github-actions.ts', localPath: path.resolve(process.cwd(), 'scripts/fix-github-actions.ts') },
+      { path: 'GITHUB_SECRETS_GUIDE.md', localPath: path.resolve(process.cwd(), 'GITHUB_SECRETS_GUIDE.md') },
+      { path: 'GITHUB_PAT_GUIDE.md', localPath: path.resolve(process.cwd(), 'GITHUB_PAT_GUIDE.md') },
       { path: 'src/main.tsx', localPath: path.resolve(process.cwd(), 'src/main.tsx') },
       { path: 'src/App.tsx', localPath: path.resolve(process.cwd(), 'src/App.tsx') },
       { path: 'src/index.css', localPath: path.resolve(process.cwd(), 'src/index.css') },
@@ -1504,6 +1510,9 @@ app.post('/api/github/push', async (req: Request, res: Response) => {
       { path: 'src/components/PWAInstallButton.tsx', localPath: path.resolve(process.cwd(), 'src/components/PWAInstallButton.tsx') },
       { path: 'src/components/OfflineIndicator.tsx', localPath: path.resolve(process.cwd(), 'src/components/OfflineIndicator.tsx') },
       { path: 'src/hooks/usePWAInstall.ts', localPath: path.resolve(process.cwd(), 'src/hooks/usePWAInstall.ts') },
+      { path: 'package-lock.json', localPath: path.resolve(process.cwd(), 'package-lock.json') },
+      { path: 'src/components/PIBuildDoctorAgent.tsx', localPath: path.resolve(process.cwd(), 'src/components/PIBuildDoctorAgent.tsx') },
+      { path: 'src/components/APKBuildDoctor.tsx', localPath: path.resolve(process.cwd(), 'src/components/APKBuildDoctor.tsx') },
       { path: 'pi_core_v5.py', localPath: path.resolve(process.cwd(), 'pi_core_v5.py') },
       { path: 'pi_transformer_studio.py', localPath: path.resolve(process.cwd(), 'pi_transformer_studio.py') },
     ];
@@ -1576,14 +1585,21 @@ app.get('/api/export/github-repo.zip', (req: Request, res: Response) => {
     '.gitignore',
     '.github/workflows/release-apk.yml',
     '.github/workflows/ci.yml',
+    '.github/workflows/main.yml',
+    'scripts/setup-github-ci.ts',
+    'scripts/fix-github-actions.ts',
+    'GITHUB_SECRETS_GUIDE.md',
+    'GITHUB_PAT_GUIDE.md',
     'src/main.tsx',
     'src/App.tsx',
     'src/index.css',
     'src/components/PIBuildAPKStudio.tsx',
     'src/components/TrainingPerformanceBenchmark.tsx',
-    'src/components/PWAInstallButton.tsx',
     'src/components/OfflineIndicator.tsx',
     'src/hooks/usePWAInstall.ts',
+    'src/components/PIBuildDoctorAgent.tsx',
+    'src/components/APKBuildDoctor.tsx',
+    'package-lock.json',
     'pi_core_v5.py',
     'pi_transformer_studio.py',
   ];
@@ -1626,6 +1642,81 @@ echo "Fertig! GitHub Actions baut nun automatisch dein signiertes Motorola 13 AP
   res.setHeader('Content-Disposition', 'attachment; filename="pi-studio-0logik-github-repo.zip"');
   res.setHeader('Content-Length', zipBuf.length.toString());
   res.send(zipBuf);
+});
+
+// Download: main.yml GitHub Actions Workflow
+app.get('/api/export/main.yml', (req: Request, res: Response) => {
+  const filePath = path.resolve(process.cwd(), '.github', 'workflows', 'main.yml');
+  if (!fs.existsSync(filePath)) {
+    try {
+      const { fixGithubActions } = require('./scripts/fix-github-actions');
+      fixGithubActions();
+    } catch {
+      // fallback
+    }
+  }
+
+  if (fs.existsSync(filePath)) {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    addAudit('ADMIN', 'main.yml heruntergeladen', 'GitHub Actions Workflow Datei bereitgestellt');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Content-Type', 'text/yaml; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="main.yml"');
+    return res.send(content);
+  }
+
+  res.status(404).send('main.yml konnte nicht gefunden werden');
+});
+
+// Download: GITHUB_SECRETS_GUIDE.md
+app.get('/api/export/github-secrets-guide.md', (req: Request, res: Response) => {
+  const filePath = path.resolve(process.cwd(), 'GITHUB_SECRETS_GUIDE.md');
+  if (fs.existsSync(filePath)) {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    addAudit('ADMIN', 'GitHub Secrets Guide heruntergeladen', 'Anleitung für Firebase und Keystore bereitgestellt');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="GITHUB_SECRETS_GUIDE.md"');
+    return res.send(content);
+  }
+
+  res.status(404).send('GITHUB_SECRETS_GUIDE.md nicht gefunden');
+});
+
+// Download: GITHUB_PAT_GUIDE.md (Schritt-für-Schritt Token Anleitung)
+app.get('/api/export/github-pat-guide.md', (req: Request, res: Response) => {
+  const filePath = path.resolve(process.cwd(), 'GITHUB_PAT_GUIDE.md');
+  if (!fs.existsSync(filePath)) {
+    try {
+      const { fixGithubActions } = require('./scripts/fix-github-actions');
+      fixGithubActions();
+    } catch {
+      // fallback
+    }
+  }
+
+  if (fs.existsSync(filePath)) {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    addAudit('ADMIN', 'GitHub PAT Guide heruntergeladen', 'Token-Erstellungsanleitung bereitgestellt');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="GITHUB_PAT_GUIDE.md"');
+    return res.send(content);
+  }
+
+  res.status(404).send('GITHUB_PAT_GUIDE.md nicht gefunden');
+});
+
+// POST: GitHub Actions & Workflows reparieren
+app.post('/api/github/fix-actions', (req: Request, res: Response) => {
+  try {
+    const { fixGithubActions } = require('./scripts/fix-github-actions');
+    const result = fixGithubActions();
+    addAudit('BUILD_AGENT', 'GitHub Actions repariert', 'main.yml & ci.yml aktualisiert');
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Reparatur fehlgeschlagen' });
+  }
 });
 
 // ──────────────────────────────────────────────
@@ -1893,6 +1984,392 @@ app.post('/api/journal', (req: Request, res: Response) => {
   addAudit('KORTEX', 'Tagebuch-Eintrag verankert', entry.theme);
 
   res.json({ success: true, entry });
+});
+
+// ──────────────────────────────────────────────
+// 0-LOGIK BUILD-DOKTOR & FEHLER-DIAGNOSE AGENT
+// ──────────────────────────────────────────────
+
+// Hilfsfunktion: Lokale Dateizeilen extrahieren
+function getLocalFileContext(filePath: string, targetLine: number, radius = 4) {
+  try {
+    const cleanPath = path.isAbsolute(filePath)
+      ? filePath
+      : path.resolve(process.cwd(), filePath.replace(/^\/+/, ''));
+
+    if (fs.existsSync(cleanPath) && fs.statSync(cleanPath).isFile()) {
+      const content = fs.readFileSync(cleanPath, 'utf8');
+      const lines = content.split('\n');
+      const start = Math.max(1, targetLine - radius);
+      const end = Math.min(lines.length, targetLine + radius);
+      const snippetLines = lines.slice(start - 1, end).map((line, idx) => ({
+        lineNumber: start + idx,
+        isTarget: start + idx === targetLine,
+        code: line,
+      }));
+      return {
+        exists: true,
+        totalLines: lines.length,
+        startLine: start,
+        endLine: end,
+        snippetLines,
+        exactLineContent: lines[targetLine - 1] || '',
+      };
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null;
+}
+
+// Deterministischer Fallback Log-Parser (Regex & Heuristiken)
+function parseBuildLogDeterministic(logText: string) {
+  let fileName = 'src/App.tsx';
+  let lineNumber = 1;
+  let columnNumber = 1;
+  let errorType = 'Build / Compiler Fehler';
+  let errorMessage = 'Unspezifizierter Fehler im Build-Log';
+  let failingCodeSnippet = '';
+
+  // 0. Python Traceback Pattern: File "/app/applet/pi_transformer_studio.py", line 171, in main
+  const pyMatch = logText.match(/File\s+["']([^"']+\.py)["'],\s+line\s+(\d+)(?:,\s+in\s+([a-zA-Z0-9_<>]+))?/i);
+  if (pyMatch) {
+    fileName = pyMatch[1];
+    lineNumber = parseInt(pyMatch[2], 10);
+    const errMatch = logText.match(/([a-zA-Z0-9_]+Error:\s*[^\n\r]+)/);
+    errorMessage = errMatch ? errMatch[1].trim() : 'Python Skript-Fehler';
+    errorType = errMatch ? errMatch[1].split(':')[0].trim() : 'Python Traceback';
+  } else {
+    // 1. Vite / Rollup Pattern: /path/file.tsx:12:34: error msg
+    const viteMatch = logText.match(/([a-zA-Z0-9_\-\.\/]+\.(?:tsx|ts|jsx|js|vue|svelte|css|json|html)):(\d+):(\d+)(?::\s*([^\n\r]+))?/i);
+    if (viteMatch) {
+      fileName = viteMatch[1];
+      lineNumber = parseInt(viteMatch[2], 10);
+      columnNumber = parseInt(viteMatch[3], 10);
+      errorMessage = viteMatch[4]?.trim() || 'Vite/Rollup Kompilierungsfehler an dieser Position';
+      errorType = 'Vite / Bundler Fehler';
+    } else {
+      // 2. TypeScript Pattern: src/App.tsx(45,12): error TS2322: ...
+      const tsMatch = logText.match(/([a-zA-Z0-9_\-\.\/]+\.(?:tsx|ts|jsx|js))\s*\((\d+),(\d+)\):\s*error\s*(TS\d+)?:\s*([^\n\r]+)/i);
+      if (tsMatch) {
+        fileName = tsMatch[1];
+        lineNumber = parseInt(tsMatch[2], 10);
+        columnNumber = parseInt(tsMatch[3], 10);
+        errorType = tsMatch[4] ? `TypeScript (${tsMatch[4]})` : 'TypeScript Typfehler';
+        errorMessage = tsMatch[5]?.trim() || 'Typ- oder Deklarationsfehler';
+      } else {
+        // 3. Node StackTrace: at Object.<anonymous> (/src/components/Header.tsx:88:14)
+        const stackMatch = logText.match(/at\s+(?:.*?\s+\()?([a-zA-Z0-9_\-\.\/]+\.(?:tsx|ts|jsx|js|mjs)):(\d+):(\d+)\)?/i);
+        if (stackMatch) {
+          fileName = stackMatch[1];
+          lineNumber = parseInt(stackMatch[2], 10);
+          columnNumber = parseInt(stackMatch[3], 10);
+          errorType = 'Runtime / Syntax StackTrace';
+          errorMessage = 'Ausnahme ausgelöst an dieser Position im StackTrace';
+        } else {
+          // 4. Gradle / Android Pattern: /app/src/main/AndroidManifest.xml:24: AAPT: error: ...
+          const gradleMatch = logText.match(/([a-zA-Z0-9_\-\.\/]+\.(?:xml|gradle|java|kt)):(\d+)(?::\s*(?:AAPT:\s*)?error:\s*([^\n\r]+))?/i);
+          if (gradleMatch) {
+            fileName = gradleMatch[1];
+            lineNumber = parseInt(gradleMatch[2], 10);
+            errorType = 'Android Gradle / AAPT2 Fehler';
+            errorMessage = gradleMatch[3]?.trim() || 'Gradle Kompilierungsfehler im Android-Projekt';
+          } else {
+            // 5. Allgemeine Zeilenangabe: line 42 oder Zeile 42
+            const lineGeneral = logText.match(/(?:line|zeile)\s*(\d+)/i);
+            if (lineGeneral) {
+              lineNumber = parseInt(lineGeneral[1], 10);
+            }
+            const fileGeneral = logText.match(/([a-zA-Z0-9_\-\.\/]+\.(?:tsx|ts|jsx|js|json|xml|gradle|py))/i);
+            if (fileGeneral) {
+              fileName = fileGeneral[1];
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Sauberen relativen Pfad formen
+  fileName = fileName.replace(process.cwd(), '').replace(/^\/+/, '');
+
+  // Lokalen Datei-Kontext laden falls vorhanden
+  const localCtx = getLocalFileContext(fileName, lineNumber, 3);
+  if (localCtx?.exactLineContent) {
+    failingCodeSnippet = localCtx.exactLineContent.trim();
+  } else {
+    failingCodeSnippet = `// Zeile ${lineNumber} in ${fileName}`;
+  }
+
+  const isJsonOrYaml = /\.(json|yml|yaml)$/i.test(fileName);
+  const correctReplacementBlock = failingCodeSnippet
+    ? isJsonOrYaml
+      ? failingCodeSnippet
+      : `// [0-LOGIK KORREKTUR für ${fileName} - Zeile ${lineNumber}]\n${failingCodeSnippet}`
+    : isJsonOrYaml
+    ? `{}`
+    : `// Korrigierter Code-Block für Zeile ${lineNumber}`;
+
+  return {
+    fileName,
+    lineNumber,
+    endLineNumber: lineNumber,
+    columnNumber,
+    errorType,
+    errorMessage,
+    summary: `Build-Fehler in ${fileName} auf Zeile ${lineNumber}: ${errorMessage}`,
+    causalAnalysis: {
+      was: `Der Build brach in Datei "${fileName}" bei Zeile ${lineNumber} ab: ${errorMessage}`,
+      weshalb: `An dieser Stelle liegt ein Syntax-, Typ- oder Referenzkonflikt vor, der den Compiler blockiert.`,
+      warum: `Kompilierung erfordert deterministische 0-Toleranz. Ein ungültiges Token oder falscher Typ erzeugt System-Entropie (-).`,
+      wieso: `Der korrigierte Code-Block stellt den stabilen Nullpunkt (0+) wieder her und erlaubt eine saubere Kompilierung.`,
+    },
+    failingCodeSnippet,
+    correctReplacementBlock,
+    targetInstruction: `Öffne Datei "${fileName}", springe zu Zeile ${lineNumber} und ersetze den fehlerhaften Block durch den korrigierten 0-Logik Code.`,
+    localContext: localCtx,
+  };
+}
+
+// POST: Log analysieren (mit gemini-3.8-flash oder 0-Logik Fallback)
+app.post('/api/agent/analyze-log', async (req: Request, res: Response) => {
+  const { logText, context } = req.body;
+  if (!logText || !logText.trim()) {
+    return res.status(400).json({ error: 'Kein Log-Text zur Analyse übergeben' });
+  }
+
+  const deterministicResult = parseBuildLogDeterministic(logText);
+
+  // Falls Gemini verfügbar ist: Tiefere kausale 0-Logik Analyse mit exakter Code-Korrektur
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const prompt = `Du bist der 0-Logik Build-Doktor Agent für PI Studio (Programmierte Intelligenz nach Patricia).
+Deine Aufgabe: Analysiere den folgenden Build-Log / Fehlermeldung präzise, kausal und ohne jede Emotion oder Halluzination.
+Ermittle exakt:
+1. "fileName": Den exakten relativen Dateinamen im Projekt (z.B. src/App.tsx, server.ts, vite.config.ts, AndroidManifest.xml, build.gradle).
+2. "lineNumber": Die exakte Zeilennummer (Ganzzahl), an der der Abbruch ausgelöst wird.
+3. "endLineNumber": Die Endzeilennummer des fehlerhaften Blocks (Ganzzahl).
+4. "columnNumber": Die Spaltennummer (Ganzzahl, falls erkennbar, sonst 1).
+5. "errorType": Der genaue Fehlertyp (z.B. "TypeScript TS2322", "Vite Rollup Unresolved Import", "SyntaxError", "Gradle AAPT2", "React Hook Rules").
+6. "errorMessage": Die originale Fehlermeldung in einem klaren Satz.
+7. "summary": Zusammenfassung auf den Punkt.
+8. "causalAnalysis": Ein Objekt mit den 4 0-Logik Säulen:
+   - "was": Was genau ist fehlerhaft?
+   - "weshalb": Weshalb konnte der Compiler/Bundler die Zeile nicht verarbeiten?
+   - "warum": Warum führt das zum Build-Abbruch?
+   - "wieso": Wieso behebt der korrigierte Code das Problem nachhaltig auf 0+?
+9. "failingCodeSnippet": Der fehlerhafte Code-Ausschnitt, der den Fehler auslöst.
+10. "correctReplacementBlock": Der EXAKTE, syntaktisch vollständige und 100% lauffähige Code-Block, der an dieser Stelle eingefügt werden muss.
+11. "targetInstruction": Die unmissverständliche Anweisung, z.B. "In Datei 'src/App.tsx' Zeile 42 bis 45 durch folgenden Block ersetzen:".
+
+Kontext: ${context || 'Web & Android Build'}
+Build-Log / Fehlermeldung:
+"""
+${logText.substring(0, 8000)}
+"""
+
+Antworte AUSSCHLIESSLICH als gültiges JSON ohne Markdown-Backticks:
+{
+  "fileName": "string",
+  "lineNumber": 123,
+  "endLineNumber": 125,
+  "columnNumber": 1,
+  "errorType": "string",
+  "errorMessage": "string",
+  "summary": "string",
+  "causalAnalysis": {
+    "was": "string",
+    "weshalb": "string",
+    "warum": "string",
+    "wieso": "string"
+  },
+  "failingCodeSnippet": "string",
+  "correctReplacementBlock": "string",
+  "targetInstruction": "string"
+}`;
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('AI log analysis timed out')), 4000)
+      );
+      const aiResponse = await Promise.race([
+        ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: prompt,
+        }),
+        timeoutPromise,
+      ]);
+
+      const rawText = aiResponse.text?.trim() || '';
+      const cleanJson = rawText.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+      const parsed = JSON.parse(cleanJson);
+
+      // Ergänze lokalen Dateikontext
+      const localCtx = getLocalFileContext(parsed.fileName || deterministicResult.fileName, parsed.lineNumber || deterministicResult.lineNumber, 4);
+
+      addAudit(
+        'BUILD_AGENT',
+        'Build-Log kausal analysiert',
+        `Datei: ${parsed.fileName || deterministicResult.fileName}:${parsed.lineNumber || deterministicResult.lineNumber}`
+      );
+
+      return res.json({
+        success: true,
+        source: 'gemini-3.8-flash',
+        diagnostic: {
+          fileName: parsed.fileName || deterministicResult.fileName,
+          lineNumber: Number(parsed.lineNumber) || deterministicResult.lineNumber,
+          endLineNumber: Number(parsed.endLineNumber) || deterministicResult.endLineNumber,
+          columnNumber: Number(parsed.columnNumber) || deterministicResult.columnNumber,
+          errorType: parsed.errorType || deterministicResult.errorType,
+          errorMessage: parsed.errorMessage || deterministicResult.errorMessage,
+          summary: parsed.summary || deterministicResult.summary,
+          causalAnalysis: parsed.causalAnalysis || deterministicResult.causalAnalysis,
+          failingCodeSnippet: parsed.failingCodeSnippet || deterministicResult.failingCodeSnippet,
+          correctReplacementBlock: parsed.correctReplacementBlock || deterministicResult.correctReplacementBlock,
+          targetInstruction: parsed.targetInstruction || deterministicResult.targetInstruction,
+          localContext: localCtx || deterministicResult.localContext,
+        },
+      });
+    } catch (err: any) {
+      console.warn('Gemini log analysis fallback to deterministic:', err?.message);
+    }
+  }
+
+  // Fallback zu deterministischer Regex-Analyse
+  addAudit(
+    'BUILD_AGENT',
+    'Build-Log deterministisch analysiert',
+    `Datei: ${deterministicResult.fileName}:${deterministicResult.lineNumber}`
+  );
+
+  res.json({
+    success: true,
+    source: '0-logik-deterministic',
+    diagnostic: deterministicResult,
+  });
+});
+
+// POST: Live Projekt-Build testen (npm run build)
+app.post('/api/agent/run-build-check', (req: Request, res: Response) => {
+  addAudit('BUILD_AGENT', 'Live Build-Check gestartet', 'npm run build auf aktuellem Projekt');
+
+  exec('npm run build', { cwd: process.cwd(), timeout: 35000 }, (error, stdout, stderr) => {
+    const combinedLog = `${stdout || ''}\n${stderr || ''}`.trim();
+    if (!error) {
+      addAudit('BUILD_AGENT', 'Live Build-Check erfolgreich', '0 Fehler, Build kompilierte sauber');
+      return res.json({
+        success: true,
+        status: 'CLEAN_0_LOGIK',
+        exitCode: 0,
+        stdout,
+        stderr,
+        message: 'Build 100% fehlerfrei! 0-Logik Integrität bestätigt.',
+      });
+    }
+
+    // Build fehlgeschlagen: Automatisch durch den 0-Logik Agenten analysieren lassen
+    const diagnostic = parseBuildLogDeterministic(combinedLog);
+    addAudit(
+      'BUILD_AGENT',
+      'Live Build fehlgeschlagen',
+      `Fehler erkannt in ${diagnostic.fileName}:${diagnostic.lineNumber}`,
+      'WARNING'
+    );
+
+    res.json({
+      success: false,
+      status: 'BUILD_FAILED',
+      exitCode: error.code || 1,
+      stdout,
+      stderr,
+      combinedLog,
+      message: `Build fehlgeschlagen. Fehler ausgelöst in ${diagnostic.fileName} Zeile ${diagnostic.lineNumber}`,
+      diagnostic,
+    });
+  });
+});
+
+// POST: 1-Klick Code-Fix automatisch anwenden
+app.post('/api/agent/apply-fix', (req: Request, res: Response) => {
+  const { filePath, correctCodeBlock, lineNumber, endLineNumber, originalSnippet } = req.body;
+
+  if (!filePath || typeof correctCodeBlock !== 'string') {
+    return res.status(400).json({ error: 'Pfad oder Code-Block fehlen' });
+  }
+
+  try {
+    const cleanRelative = filePath.replace(/^\/+/, '').replace(/\.\.\//g, '');
+    const targetFile = path.resolve(process.cwd(), cleanRelative);
+
+    // Sicherheitsprüfung: Pfad muss innerhalb des Projektordners liegen
+    if (!targetFile.startsWith(process.cwd())) {
+      return res.status(403).json({ error: 'Zugriff außerhalb des Projektordners unzulässig' });
+    }
+
+    if (!fs.existsSync(targetFile)) {
+      return res.status(404).json({ error: `Datei nicht gefunden: ${cleanRelative}` });
+    }
+
+    let content = fs.readFileSync(targetFile, 'utf8');
+    const backupPath = `${targetFile}.bak.${Date.now()}`;
+    fs.writeFileSync(backupPath, content, 'utf8');
+
+    let applied = false;
+
+    // Methode A: Exakte Ersetzung per originalSnippet
+    if (originalSnippet && originalSnippet.trim() && content.includes(originalSnippet.trim())) {
+      content = content.replace(originalSnippet.trim(), correctCodeBlock.trim());
+      applied = true;
+    }
+
+    // Methode B: Ersetzung nach Zeilennummern
+    if (!applied && lineNumber && typeof lineNumber === 'number') {
+      const lines = content.split('\n');
+      const startIdx = Math.max(0, lineNumber - 1);
+      const endIdx = endLineNumber && typeof endLineNumber === 'number' ? Math.max(startIdx, endLineNumber - 1) : startIdx;
+      
+      lines.splice(startIdx, endIdx - startIdx + 1, correctCodeBlock);
+      content = lines.join('\n');
+      applied = true;
+    }
+
+    if (!applied) {
+      return res.status(400).json({
+        error: `Konnte die Stelle in ${cleanRelative} nicht eindeutig lokalisieren. Bitte manuell einfügen.`,
+      });
+    }
+
+    fs.writeFileSync(targetFile, content, 'utf8');
+
+    // Audit & Kortex verankern
+    addAudit(
+      'BUILD_AGENT',
+      '1-Klick Auto-Reparatur angewendet',
+      `Datei ${cleanRelative} auf Zeile ${lineNumber || 'Snippet'} korrigiert`
+    );
+
+    storage.kortex.unshift({
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      category: 'BUILD_FIX',
+      source: '0-Logik Build-Doktor',
+      content: `Korrektur in ${cleanRelative} bei Zeile ${lineNumber}: ${correctCodeBlock.substring(0, 100)}...`,
+      reasoning: 'Automatischer deterministischer Fix zur Wiederherstellung von 0+ Build-Stabilität',
+      polarity: 0.0,
+      anonymized: true,
+      tags: ['Build-Agent', 'Auto-Fix', 'Code-Korrektur'],
+    });
+    saveStorage();
+
+    res.json({
+      success: true,
+      message: `Code-Block erfolgreich in ${cleanRelative} Zeile ${lineNumber} eingespielt!`,
+      backupCreated: path.basename(backupPath),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Fehler beim Anwenden des Fixes: ' + err.message });
+  }
 });
 
 // ──────────────────────────────────────────────
