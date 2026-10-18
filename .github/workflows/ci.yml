@@ -1,0 +1,41 @@
+# CI Pipeline — PI Studio 0-Logik (Ohne Zeile-21 Lock-Fehler)
+name: CI Pipeline — PI Studio 0-Logik
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Node Dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Lint & Typecheck TypeScript
+        run: npm run lint
+
+      - name: Build Web & PWA Bundle
+        run: npm run build
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify PI Core & 0-Logic Engine
+        run: |
+          python3 -m py_compile pi_core_v5.py
+          python3 -m py_compile pi_transformer_studio.py
+          python3 pi_core_v5.py
+          python3 pi_transformer_studio.py --steps 25
