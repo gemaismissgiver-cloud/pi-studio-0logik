@@ -25,7 +25,7 @@ jobs:
           node-version: 20
 
       - name: Install Dependencies
-        run: npm ci || npm install
+        run: npm install --legacy-peer-deps
 
       - name: Build Web App
         run: npm run build
@@ -46,13 +46,24 @@ jobs:
           # Create distributable package archive
           tar -czf build/apk-release/pi-studio-motorola13-standalone.tar.gz dist/
 
+      - name: Upload Motorola 13 & Release Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: motorola13-build-package
+          path: |
+            build/apk-release/*
+            pi_core_v5.py
+            pi_transformer_studio.py
+          retention-days: 14
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
-          name: PI Studio Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name || inputs.version || 'v5.2.0' }}
+          name: PI Studio Release ${{ github.ref_name || inputs.version || 'v5.2.0' }}
           body: |
-            ## 0-Logik Release ${{ github.ref_name }}
+            ## 0-Logik Release ${{ github.ref_name || inputs.version || 'v5.2.0' }}
             - Motorola 13 PWA & Standalone Bundle
             - 9 Core Tools einsatzbereit
             - Transformer Studio LoRA Adapter
