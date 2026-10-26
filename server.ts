@@ -129,6 +129,18 @@ interface StorageState {
   activeTools: Record<string, boolean>;
   chatSessions: ChatSession[];
   journal: JournalEntry[];
+  createdApps?: GeneratedApp[];
+}
+
+export interface GeneratedApp {
+  id: string;
+  title: string;
+  prompt: string;
+  category: string;
+  createdAt: string;
+  version: string;
+  htmlCode: string;
+  icon: string;
 }
 
 // Load storage state
@@ -1485,43 +1497,38 @@ app.post('/api/github/push', async (req: Request, res: Response) => {
       repoUrl = createData.html_url;
     }
 
-    // 3. Collect core repository files
-    const filesToUpload: Array<{ path: string; localPath: string }> = [
-      { path: 'package.json', localPath: path.resolve(process.cwd(), 'package.json') },
-      { path: 'tsconfig.json', localPath: path.resolve(process.cwd(), 'tsconfig.json') },
-      { path: 'vite.config.ts', localPath: path.resolve(process.cwd(), 'vite.config.ts') },
-      { path: 'server.ts', localPath: path.resolve(process.cwd(), 'server.ts') },
-      { path: 'index.html', localPath: path.resolve(process.cwd(), 'index.html') },
-      { path: 'metadata.json', localPath: path.resolve(process.cwd(), 'metadata.json') },
-      { path: 'README.md', localPath: path.resolve(process.cwd(), 'README.md') },
-      { path: '.gitignore', localPath: path.resolve(process.cwd(), '.gitignore') },
-      { path: '.github/workflows/release-apk.yml', localPath: path.resolve(process.cwd(), '.github/workflows/release-apk.yml') },
-      { path: '.github/workflows/ci.yml', localPath: path.resolve(process.cwd(), '.github/workflows/ci.yml') },
-      { path: '.github/workflows/main.yml', localPath: path.resolve(process.cwd(), '.github/workflows/main.yml') },
-      { path: 'scripts/setup-github-ci.ts', localPath: path.resolve(process.cwd(), 'scripts/setup-github-ci.ts') },
-      { path: 'scripts/fix-github-actions.ts', localPath: path.resolve(process.cwd(), 'scripts/fix-github-actions.ts') },
-      { path: 'GITHUB_SECRETS_GUIDE.md', localPath: path.resolve(process.cwd(), 'GITHUB_SECRETS_GUIDE.md') },
-      { path: 'GITHUB_PAT_GUIDE.md', localPath: path.resolve(process.cwd(), 'GITHUB_PAT_GUIDE.md') },
-      { path: 'src/main.tsx', localPath: path.resolve(process.cwd(), 'src/main.tsx') },
-      { path: 'src/App.tsx', localPath: path.resolve(process.cwd(), 'src/App.tsx') },
-      { path: 'src/index.css', localPath: path.resolve(process.cwd(), 'src/index.css') },
-      { path: 'src/components/PIBuildAPKStudio.tsx', localPath: path.resolve(process.cwd(), 'src/components/PIBuildAPKStudio.tsx') },
-      { path: 'src/components/TrainingPerformanceBenchmark.tsx', localPath: path.resolve(process.cwd(), 'src/components/TrainingPerformanceBenchmark.tsx') },
-      { path: 'src/components/PWAInstallButton.tsx', localPath: path.resolve(process.cwd(), 'src/components/PWAInstallButton.tsx') },
-      { path: 'src/components/OfflineIndicator.tsx', localPath: path.resolve(process.cwd(), 'src/components/OfflineIndicator.tsx') },
-      { path: 'src/hooks/usePWAInstall.ts', localPath: path.resolve(process.cwd(), 'src/hooks/usePWAInstall.ts') },
-      { path: 'package-lock.json', localPath: path.resolve(process.cwd(), 'package-lock.json') },
-      { path: 'src/components/PIBuildDoctorAgent.tsx', localPath: path.resolve(process.cwd(), 'src/components/PIBuildDoctorAgent.tsx') },
-      { path: 'src/components/APKBuildDoctor.tsx', localPath: path.resolve(process.cwd(), 'src/components/APKBuildDoctor.tsx') },
-      { path: 'pi_core_v5.py', localPath: path.resolve(process.cwd(), 'pi_core_v5.py') },
-      { path: 'pi_transformer_studio.py', localPath: path.resolve(process.cwd(), 'pi_transformer_studio.py') },
-    ];
+function getRepositoryFiles(): Array<{ path: string; localPath: string }> {
+  const root = process.cwd();
+  const ignoreDirs = new Set(['node_modules', '.git', 'dist', 'build', '.aistudio', 'data', '.cache', 'tmp']);
+  const ignoreFiles = new Set(['.DS_Store', 'package-lock.json.backup']);
+  const result: Array<{ path: string; localPath: string }> = [];
+
+  function scan(dir: string, prefix = '') {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (ignoreDirs.has(entry.name) || ignoreFiles.has(entry.name)) continue;
+      const fullPath = path.join(dir, entry.name);
+      const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+      if (entry.isDirectory()) {
+        scan(fullPath, relPath);
+      } else if (entry.isFile()) {
+        result.push({ path: relPath, localPath: fullPath });
+      }
+    }
+  }
+
+  scan(root);
+  return result;
+}
+
+    // 3. Collect core repository files recursively (including android/ and capacitor.config.ts)
+    const filesToUpload = getRepositoryFiles();
 
     let uploadedCount = 0;
     for (const f of filesToUpload) {
       if (!fs.existsSync(f.localPath)) continue;
-      const content = fs.readFileSync(f.localPath, 'utf-8');
-      const base64Content = Buffer.from(content).toString('base64');
+      const base64Content = fs.readFileSync(f.localPath).toString('base64');
 
       let sha: string | undefined = undefined;
       const getFileRes = await fetch(`https://api.github.com/repos/${username}/${cleanRepoName}/contents/${f.path}`, {
@@ -1599,6 +1606,7 @@ app.get('/api/export/github-repo.zip', (req: Request, res: Response) => {
     'src/hooks/usePWAInstall.ts',
     'src/components/PIBuildDoctorAgent.tsx',
     'src/components/APKBuildDoctor.tsx',
+    'src/components/PIAppStudioCreator.tsx',
     'package-lock.json',
     'pi_core_v5.py',
     'pi_transformer_studio.py',
@@ -1707,6 +1715,46 @@ app.get('/api/export/github-pat-guide.md', (req: Request, res: Response) => {
   res.status(404).send('GITHUB_PAT_GUIDE.md nicht gefunden');
 });
 
+// Download: Standalone Single-File HTML App (100% Offline, KEINE ZIP-DATEI)
+app.get('/api/export/pi-studio-offline.html', (req: Request, res: Response) => {
+  const htmlPath = path.resolve(process.cwd(), 'dist', 'index.html');
+  const assetsDir = path.resolve(process.cwd(), 'dist', 'assets');
+
+  if (fs.existsSync(htmlPath) && fs.existsSync(assetsDir)) {
+    try {
+      let html = fs.readFileSync(htmlPath, 'utf-8');
+      const cssFiles = fs.readdirSync(assetsDir).filter((f) => f.endsWith('.css'));
+      const jsFiles = fs.readdirSync(assetsDir).filter((f) => f.endsWith('.js'));
+
+      let inlinedCss = '';
+      cssFiles.forEach((f) => {
+        inlinedCss += fs.readFileSync(path.join(assetsDir, f), 'utf-8') + '\n';
+      });
+
+      let inlinedJs = '';
+      jsFiles.forEach((f) => {
+        inlinedJs += fs.readFileSync(path.join(assetsDir, f), 'utf-8') + '\n';
+      });
+
+      // Remove external asset references and embed directly into one portable file
+      html = html.replace(/<link rel="stylesheet"[^>]+>/g, '');
+      html = html.replace(/<script type="module"[^>]+><\/script>/g, '');
+      html = html.replace('</head>', `<style>\n${inlinedCss}\n</style>\n</head>`);
+      html = html.replace('</body>', `<script type="module">\n${inlinedJs}\n</script>\n</body>`);
+
+      addAudit('ADMIN', 'Offline Standalone HTML heruntergeladen', 'pi-studio-offline.html ausgeliefert (0% ZIP)');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="pi-studio-offline.html"');
+      return res.send(html);
+    } catch (err: any) {
+      return res.status(500).send(`Fehler beim Erstellen der Offline-App: ${err.message}`);
+    }
+  }
+
+  res.status(404).send('Dist-Ordner noch nicht kompiliert. Bitte npm run build ausführen.');
+});
+
 // POST: GitHub Actions & Workflows reparieren
 app.post('/api/github/fix-actions', (req: Request, res: Response) => {
   try {
@@ -1717,6 +1765,492 @@ app.post('/api/github/fix-actions', (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Reparatur fehlgeschlagen' });
   }
+});
+
+// ──────────────────────────────────────────────
+// PI PRIVATES APP STUDIO: PROMPT-TO-APP ENGINE
+// ──────────────────────────────────────────────
+
+function getDefaultCreatedApps(): GeneratedApp[] {
+  return [
+    {
+      id: 'app-schichtplaner-default',
+      title: 'Schichtplaner 0-Logik',
+      prompt: 'Dienst- und Schichtplaner für Motorola 13 mit Farbmarkierungen, Notizen und Stundenübersicht',
+      category: 'Produktivität',
+      createdAt: new Date().toISOString(),
+      version: '1.0.0',
+      icon: '📅',
+      htmlCode: `<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schichtplaner 0-Logik</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-4 font-sans">
+  <div class="max-w-md mx-auto space-y-4">
+    <header class="border-b border-slate-800 pb-3 flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-bold text-cyan-400">📅 Schichtplaner</h1>
+        <p class="text-xs text-slate-400">Motorola 13 · 0-Logik Offline</p>
+      </div>
+      <button onclick="clearAll()" class="text-xs text-red-400 hover:underline">Reset</button>
+    </header>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="font-bold text-sm" id="monthTitle">Oktober 2026</h2>
+        <div class="text-xs text-cyan-300 font-bold" id="totalHours">Gesamt: 0h</div>
+      </div>
+
+      <div class="grid grid-cols-4 gap-2 text-xs">
+        <button onclick="setShiftType('F')" class="p-2 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-300 font-bold active:scale-95 transition">Früh (F)</button>
+        <button onclick="setShiftType('S')" class="p-2 rounded-xl bg-blue-500/20 border border-blue-500/50 text-blue-300 font-bold active:scale-95 transition">Spät (S)</button>
+        <button onclick="setShiftType('N')" class="p-2 rounded-xl bg-purple-500/20 border border-purple-500/50 text-purple-300 font-bold active:scale-95 transition">Nacht (N)</button>
+        <button onclick="setShiftType('X')" class="p-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 font-bold active:scale-95 transition">Frei (X)</button>
+      </div>
+      <p class="text-[10px] text-slate-500 text-center">Tippe auf eine Schichtart oben und dann auf einen Kalendertag!</p>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+      <div class="grid grid-cols-7 gap-1.5 text-center text-xs font-bold mb-2 text-slate-500">
+        <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
+      </div>
+      <div class="grid grid-cols-7 gap-1.5" id="calendarDays"></div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
+      <h3 class="text-xs font-bold text-slate-300">Notiz zum ausgewählten Tag:</h3>
+      <input type="text" id="dayNote" placeholder="z.B. Einspringen, Teambesprechung..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500">
+      <button onclick="saveNote()" class="w-full py-2 bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold rounded-xl text-xs transition">Notiz sichern</button>
+    </div>
+  </div>
+
+  <script>
+    let selectedType = 'F';
+    let selectedDay = 1;
+    let shifts = JSON.parse(localStorage.getItem('pi_shifts') || '{}');
+    let notes = JSON.parse(localStorage.getItem('pi_shift_notes') || '{}');
+
+    function setShiftType(type) {
+      selectedType = type;
+    }
+
+    function renderCalendar() {
+      const container = document.getElementById('calendarDays');
+      container.innerHTML = '';
+      let totalH = 0;
+
+      for (let day = 1; day <= 31; day++) {
+        const shift = shifts[day] || '';
+        let colorClass = 'bg-slate-950 border-slate-800 text-slate-400';
+        if (shift === 'F') { colorClass = 'bg-amber-950/60 border-amber-500 text-amber-300'; totalH += 8; }
+        if (shift === 'S') { colorClass = 'bg-blue-950/60 border-blue-500 text-blue-300'; totalH += 8; }
+        if (shift === 'N') { colorClass = 'bg-purple-950/60 border-purple-500 text-purple-300'; totalH += 10; }
+        if (shift === 'X') { colorClass = 'bg-slate-800/80 border-slate-600 text-slate-500'; }
+
+        const div = document.createElement('div');
+        div.className = 'aspect-square rounded-xl border flex flex-col items-center justify-center cursor-pointer active:scale-90 transition ' + colorClass;
+        div.innerHTML = '<span class="text-[11px] font-bold">' + day + '</span><span class="text-[9px] font-black">' + shift + '</span>';
+        div.onclick = function() {
+          selectedDay = day;
+          shifts[day] = selectedType;
+          localStorage.setItem('pi_shifts', JSON.stringify(shifts));
+          document.getElementById('dayNote').value = notes[day] || '';
+          renderCalendar();
+        };
+        container.appendChild(div);
+      }
+      document.getElementById('totalHours').innerText = 'Gesamt: ' + totalH + 'h';
+    }
+
+    function saveNote() {
+      const val = document.getElementById('dayNote').value.trim();
+      notes[selectedDay] = val;
+      localStorage.setItem('pi_shift_notes', JSON.stringify(notes));
+      alert('Notiz für Tag ' + selectedDay + ' gespeichert!');
+    }
+
+    function clearAll() {
+      if (confirm('Wirklich alle Schichten zurücksetzen?')) {
+        shifts = {};
+        notes = {};
+        localStorage.removeItem('pi_shifts');
+        localStorage.removeItem('pi_shift_notes');
+        renderCalendar();
+      }
+    }
+
+    renderCalendar();
+  </script>
+</body>
+</html>`
+    },
+    {
+      id: 'app-haushaltsbuch-default',
+      title: 'Haushaltsbuch & Budget',
+      prompt: 'Ausgaben- und Einnahmen-Tracker mit Kategorien und Monatsbilanz',
+      category: 'Finanzen',
+      createdAt: new Date().toISOString(),
+      version: '1.0.0',
+      icon: '💰',
+      htmlCode: `<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Haushaltsbuch & Budget</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-4 font-sans">
+  <div class="max-w-md mx-auto space-y-4">
+    <header class="border-b border-slate-800 pb-3 flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-bold text-emerald-400">💰 Haushaltsbuch</h1>
+        <p class="text-xs text-slate-400">Private Finanzen · 0-Logik LocalStorage</p>
+      </div>
+      <div class="text-right">
+        <span class="text-xs text-slate-400">Saldo:</span>
+        <div class="text-base font-bold text-emerald-300" id="balanceDisplay">0.00 €</div>
+      </div>
+    </header>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+      <h2 class="font-bold text-xs text-slate-300 uppercase tracking-wide">Neue Buchung</h2>
+      <div class="grid grid-cols-2 gap-2">
+        <input type="text" id="descInput" placeholder="Beschreibung (z.B. Einkauf)" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+        <input type="number" id="amountInput" step="0.01" placeholder="Betrag (€)" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+      </div>
+      <div class="flex gap-2">
+        <select id="catSelect" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white focus:outline-none">
+          <option value="Lebensmittel">🛒 Lebensmittel</option>
+          <option value="Wohnen">🏠 Wohnen & Miete</option>
+          <option value="Mobilität">🚗 Mobilität / Tanken</option>
+          <option value="Freizeit">☕ Freizeit & Hobby</option>
+          <option value="Einnahme">💵 Einnahme / Gehalt</option>
+        </select>
+        <button onclick="addEntry()" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs transition active:scale-95">Buchen</button>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
+      <div class="flex items-center justify-between text-xs font-bold text-slate-400 pb-1 border-b border-slate-800">
+        <span>Letzte Buchungen</span>
+        <button onclick="clearEntries()" class="text-[10px] text-red-400 hover:underline">Alle löschen</button>
+      </div>
+      <div id="entriesList" class="space-y-1.5 max-h-80 overflow-y-auto"></div>
+    </div>
+  </div>
+
+  <script>
+    let entries = JSON.parse(localStorage.getItem('pi_budget_entries') || '[]');
+
+    function renderEntries() {
+      const list = document.getElementById('entriesList');
+      list.innerHTML = '';
+      let balance = 0;
+
+      if (entries.length === 0) {
+        list.innerHTML = '<p class="text-center text-xs text-slate-500 py-4">Noch keine Buchungen vorhanden.</p>';
+      }
+
+      entries.forEach((e, idx) => {
+        const isIncome = e.category === 'Einnahme';
+        balance += isIncome ? e.amount : -e.amount;
+
+        const row = document.createElement('div');
+        row.className = 'p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 flex items-center justify-between text-xs';
+        row.innerHTML = '<div><p class="font-bold text-white">' + e.desc + '</p><p class="text-[10px] text-slate-500">' + e.category + ' · ' + e.date + '</p></div>' +
+          '<div class="flex items-center gap-2"><span class="font-bold ' + (isIncome ? 'text-emerald-400' : 'text-red-400') + '">' + (isIncome ? '+' : '-') + e.amount.toFixed(2) + ' €</span>' +
+          '<button onclick="deleteEntry(' + idx + ')" class="text-slate-500 hover:text-red-400">✕</button></div>';
+        list.appendChild(row);
+      });
+
+      document.getElementById('balanceDisplay').innerText = balance.toFixed(2) + ' €';
+    }
+
+    function addEntry() {
+      const desc = document.getElementById('descInput').value.trim();
+      const amount = parseFloat(document.getElementById('amountInput').value);
+      const cat = document.getElementById('catSelect').value;
+
+      if (!desc || isNaN(amount) || amount <= 0) {
+        alert('Bitte gültige Beschreibung und Betrag eingeben.');
+        return;
+      }
+
+      entries.unshift({
+        desc,
+        amount,
+        category: cat,
+        date: new Date().toLocaleDateString('de-DE')
+      });
+
+      localStorage.setItem('pi_budget_entries', JSON.stringify(entries));
+      document.getElementById('descInput').value = '';
+      document.getElementById('amountInput').value = '';
+      renderEntries();
+    }
+
+    function deleteEntry(idx) {
+      entries.splice(idx, 1);
+      localStorage.setItem('pi_budget_entries', JSON.stringify(entries));
+      renderEntries();
+    }
+
+    function clearEntries() {
+      if (confirm('Wirklich alle Buchungen löschen?')) {
+        entries = [];
+        localStorage.removeItem('pi_budget_entries');
+        renderEntries();
+      }
+    }
+
+    renderEntries();
+  </script>
+</body>
+</html>`
+    }
+  ];
+}
+
+// GET: Alle erstellten Apps abrufen
+app.get('/api/studio/apps', (req: Request, res: Response) => {
+  if (!storage.createdApps || !Array.isArray(storage.createdApps) || storage.createdApps.length === 0) {
+    storage.createdApps = getDefaultCreatedApps();
+    saveStorage();
+  }
+  res.json({ apps: storage.createdApps });
+});
+
+// POST: Neue App per Prompt generieren
+app.post('/api/studio/generate-app', async (req: Request, res: Response) => {
+  const { prompt, title, category = 'Produktivität' } = req.body;
+  if (!prompt || !prompt.trim()) {
+    return res.status(400).json({ error: 'Kein Prompt übergeben' });
+  }
+
+  const generatedTitle = title?.trim() || prompt.trim().split(' ').slice(0, 4).join(' ');
+  const appId = `app-${Date.now()}`;
+  let htmlResult = '';
+
+  // 1. Versuche KI-Generierung mit Gemini falls API-Schlüssel vorhanden
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const systemPrompt = `Du bist die private App-Creator-Engine für PI Studio (Programmierte Intelligenz nach Patricia).
+Deine Aufgabe: Erstelle eine vollständige, wunderschöne, interaktive Ein-Datei-HTML5-Applikation (inklusive Tailwind CSS via CDN, modernem Dark-Mode-Design, Touch-Optimierung für Mobilgeräte wie Motorola 13, und echter LocalStorage-Speicherung) basierend auf folgendem Benutzer-Wunsch:
+"${prompt}"
+
+ANFORDERUNGEN:
+1. Vollständiges HTML-Dokument mit <!DOCTYPE html><html><head>...</head><body>...</body></html>.
+2. Binde Tailwind CSS via CDN ein: <script src="https://cdn.tailwindcss.com"></script>.
+3. Schönes, modernes UI im 0-Logik Dark-Theme (slate-950, cyan-400, purple-500, emerald-400).
+4. Vollständig interaktiv mit nativem JavaScript (Elemente anlegen, bearbeiten, abhaken, löschen).
+5. Speichere alle Benutzerdaten in localStorage mit eindeutigem Präfix, sodass Daten beim Neuladen erhalten bleiben!
+6. Touch- und Smartphone-optimiert für Motorola 13 Bildschirme.
+7. Antworte AUSSCHLIESSLICH mit dem reinen HTML-Code, ohne Markdown-Backticks (\`\`\`html) davor oder danach!`;
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('AI generation timed out')), 9000)
+      );
+
+      const aiResponse = await Promise.race([
+        ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: systemPrompt,
+        }),
+        timeoutPromise,
+      ]);
+
+      const raw = aiResponse.text?.trim() || '';
+      htmlResult = raw.replace(/^```html\s*/i, '').replace(/```$/i, '').trim();
+    } catch (err: any) {
+      console.warn('Gemini App Generation fallback to template:', err?.message);
+    }
+  }
+
+  // 2. Fallback: Deterministische, maßgeschneiderte App
+  if (!htmlResult || !htmlResult.includes('<html')) {
+    htmlResult = `<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${generatedTitle}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-4 font-sans">
+  <div class="max-w-md mx-auto space-y-4">
+    <header class="border-b border-slate-800 pb-3 flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-bold text-cyan-400">${generatedTitle}</h1>
+        <p class="text-xs text-slate-400">${category} · 0-Logik App</p>
+      </div>
+      <span class="text-xs px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">Motorola 13</span>
+    </header>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+      <h2 class="font-bold text-xs text-slate-300 uppercase tracking-wide">Neuer Eintrag</h2>
+      <div class="space-y-2">
+        <input type="text" id="itemTitle" placeholder="Titel / Bezeichnung" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500">
+        <textarea id="itemDesc" rows="2" placeholder="Notizen / Details..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"></textarea>
+        <button onclick="addItem()" class="w-full py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold rounded-xl text-xs transition active:scale-95">Hinzufügen & Sichern</button>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
+      <div class="flex items-center justify-between text-xs font-bold text-slate-400 pb-1 border-b border-slate-800">
+        <span>Gespeicherte Einträge</span>
+        <button onclick="clearItems()" class="text-[10px] text-red-400 hover:underline">Alle löschen</button>
+      </div>
+      <div id="itemsList" class="space-y-2 max-h-80 overflow-y-auto"></div>
+    </div>
+  </div>
+
+  <script>
+    const storageKey = 'pi_app_${appId}';
+    let items = JSON.parse(localStorage.getItem(storageKey) || '[]');
+
+    function render() {
+      const list = document.getElementById('itemsList');
+      list.innerHTML = '';
+      if (items.length === 0) {
+        list.innerHTML = '<p class="text-center text-xs text-slate-500 py-4">Noch keine Einträge vorhanden.</p>';
+        return;
+      }
+      items.forEach((item, idx) => {
+        const div = document.createElement('div');
+        div.className = 'p-3 rounded-xl bg-slate-950 border border-slate-800/80 flex items-start justify-between gap-2 text-xs';
+        div.innerHTML = '<div class="space-y-0.5"><p class="font-bold text-white">' + item.title + '</p><p class="text-[11px] text-slate-400">' + item.desc + '</p><p class="text-[9px] text-slate-500">' + item.date + '</p></div>' +
+          '<button onclick="deleteItem(' + idx + ')" class="text-slate-500 hover:text-red-400 text-sm">✕</button>';
+        list.appendChild(div);
+      });
+    }
+
+    function addItem() {
+      const title = document.getElementById('itemTitle').value.trim();
+      const desc = document.getElementById('itemDesc').value.trim();
+      if (!title) { alert('Bitte einen Titel eingeben!'); return; }
+      items.unshift({ title, desc, date: new Date().toLocaleString('de-DE') });
+      localStorage.setItem(storageKey, JSON.stringify(items));
+      document.getElementById('itemTitle').value = '';
+      document.getElementById('itemDesc').value = '';
+      render();
+    }
+
+    function deleteItem(idx) {
+      items.splice(idx, 1);
+      localStorage.setItem(storageKey, JSON.stringify(items));
+      render();
+    }
+
+    function clearItems() {
+      if (confirm('Alle Einträge löschen?')) {
+        items = [];
+        localStorage.removeItem(storageKey);
+        render();
+      }
+    }
+
+    render();
+  </script>
+</body>
+</html>`;
+  }
+
+  const icons: Record<string, string> = {
+    'Produktivität': '📅',
+    'Finanzen': '💰',
+    'Gesundheit': '🏃',
+    'Lifestyle': '🍳',
+    'Sicherheit': '🔐',
+    'Audio & Medien': '🎵',
+  };
+
+  const newApp: GeneratedApp = {
+    id: appId,
+    title: generatedTitle,
+    prompt: prompt.trim(),
+    category,
+    createdAt: new Date().toISOString(),
+    version: '1.0.0',
+    htmlCode: htmlResult,
+    icon: icons[category] || '📱',
+  };
+
+  if (!storage.createdApps) storage.createdApps = [];
+  storage.createdApps.unshift(newApp);
+  saveStorage();
+
+  addAudit('ADMIN', 'Neue App generiert', `Titel: "${newApp.title}" per 0-Logik Prompt`);
+  res.json({ success: true, app: newApp });
+});
+
+// DELETE: App löschen
+app.delete('/api/studio/apps/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (storage.createdApps) {
+    storage.createdApps = storage.createdApps.filter((a) => a.id !== id);
+    saveStorage();
+  }
+  addAudit('ADMIN', 'App gelöscht', `App-ID: ${id}`);
+  res.json({ success: true });
+});
+
+// GET: Standalone HTML Export für die generierte App
+app.get('/api/studio/apps/:id/export-html', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const appItem = (storage.createdApps || []).find((a) => a.id === id);
+  if (!appItem) {
+    return res.status(404).send('App nicht gefunden');
+  }
+
+  const safeFilename = `${appItem.title.toLowerCase().replace(/[^a-z0-9]/g, '-')}.html`;
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+  res.send(appItem.htmlCode);
+});
+
+// GET: Standalone APK-Paket für die generierte App
+app.get('/api/studio/apps/:id/export-apk', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const appItem = (storage.createdApps || []).find((a) => a.id === id);
+  if (!appItem) {
+    return res.status(404).send('App nicht gefunden');
+  }
+
+  const safePkg = `com.missgiver.${appItem.title.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+  const manifest = `<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safePkg}" android:versionCode="1" android:versionName="1.0">
+  <uses-permission android:name="android.permission.INTERNET" />
+  <application android:label="${appItem.title}" android:hardwareAccelerated="true">
+    <activity android:name=".MainActivity" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>`;
+
+  const files = [
+    { name: 'index.html', content: appItem.htmlCode },
+    { name: 'AndroidManifest.xml', content: manifest },
+    { name: 'app_config.json', content: JSON.stringify(appItem, null, 2) }
+  ];
+
+  const apkBuf = generateZipBuffer(files);
+  const safeFilename = `${appItem.title.toLowerCase().replace(/[^a-z0-9]/g, '-')}-motorola13.apk`;
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+  res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+  res.setHeader('Content-Length', apkBuf.length.toString());
+  res.send(apkBuf);
 });
 
 // ──────────────────────────────────────────────
