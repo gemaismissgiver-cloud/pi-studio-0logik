@@ -36,12 +36,13 @@ import {
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { PIBuildDoctorAgent } from './PIBuildDoctorAgent';
 import { APKBuildDoctor } from './APKBuildDoctor';
+import { PIAppStudioCreator } from './PIAppStudioCreator';
 
 export const PIBuildAPKStudio: React.FC = () => {
   const { isInstallable, isInstalled, install } = usePWAInstall();
 
   // Navigation Sub-Tabs
-  const [activeSubTab, setActiveSubTab] = useState<'buildrun' | 'doctor' | 'apkdoctor' | 'github' | 'apk'>('buildrun');
+  const [activeSubTab, setActiveSubTab] = useState<'creator' | 'buildrun' | 'doctor' | 'apkdoctor' | 'github' | 'apk'>('creator');
 
   // Build & Run State
   const [building, setBuilding] = useState(false);
@@ -351,6 +352,20 @@ android {
           {/* Sub-Tab Switcher */}
           <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-mono flex-wrap">
             <button
+              onClick={() => setActiveSubTab('creator')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                activeSubTab === 'creator'
+                  ? 'bg-gradient-to-r from-purple-500 via-indigo-600 to-cyan-500 text-white font-bold shadow-md shadow-purple-500/25'
+                  : 'text-purple-300 hover:text-white'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <span>App-Creator (Prompt-Studio)</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-purple-950 text-purple-200 border border-purple-700 font-bold">
+                NEU
+              </span>
+            </button>
+            <button
               onClick={() => setActiveSubTab('buildrun')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
                 activeSubTab === 'buildrun'
@@ -359,7 +374,7 @@ android {
               }`}
             >
               <Zap className="w-3.5 h-3.5" />
-              <span>Build &amp; Run Flow</span>
+              <span>PI System Build</span>
             </button>
             <button
               onClick={() => setActiveSubTab('doctor')}
@@ -413,6 +428,15 @@ android {
             </button>
           </div>
         </div>
+
+        {/* ══════════════════════════════════════════════════════
+            SUB-TAB: PI PRIVATES APP STUDIO (PROMPT-TO-APP)
+        ══════════════════════════════════════════════════════ */}
+        {activeSubTab === 'creator' && (
+          <div className="space-y-4 animate-in fade-in">
+            <PIAppStudioCreator />
+          </div>
+        )}
 
         {/* ══════════════════════════════════════════════════════
             SUB-TAB 1: BUILD & RUN FLOW
@@ -1077,37 +1101,25 @@ git push -u origin main`}
                 <div className="pt-2 space-y-2">
                   <button
                     onClick={handleInstallClick}
-                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-mono text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95 transition"
+                    className="w-full py-3 px-3 rounded-xl bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 hover:from-cyan-300 hover:to-emerald-300 text-slate-950 font-mono text-xs font-black flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-cyan-500/25 active:scale-95 transition"
                   >
-                    {isInstalled ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4 text-emerald-950" />
-                        <span>✓ Auf Motorola 13 aktiv (Optionen öffnen)</span>
-                      </>
-                    ) : isInstallable ? (
-                      <>
-                        <Smartphone className="w-4 h-4" />
-                        <span>Jetzt auf Motorola 13 installieren</span>
-                      </>
-                    ) : (
-                      <>
-                        <Smartphone className="w-4 h-4" />
-                        <span>Auf Motorola 13 installieren (Anleitung)</span>
-                      </>
-                    )}
+                    <Smartphone className="w-4 h-4" />
+                    <span>JETZT AUF MOTOROLA 13 INSTALLIEREN</span>
                   </button>
 
-                  <button
-                    onClick={() => window.open(window.location.href, '_blank')}
-                    className="w-full py-2 px-3 rounded-xl bg-slate-950/80 hover:bg-slate-900 border border-cyan-800/60 text-cyan-300 font-mono text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"
+                  <a
+                    href={typeof window !== 'undefined' ? window.location.href : '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2.5 px-3 rounded-xl bg-slate-950 hover:bg-slate-900 border border-cyan-500/50 text-cyan-300 font-mono text-[11px] font-bold flex items-center justify-center gap-2 cursor-pointer transition text-center"
                   >
-                    <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>In eigenem Vollbild-Tab öffnen</span>
-                  </button>
+                    <ExternalLink className="w-4 h-4 text-cyan-400" />
+                    <span>In eigenem Tab in Chrome öffnen</span>
+                  </a>
                 </div>
               </div>
 
-              {/* Path 2: Download Standalone .APK File */}
+              {/* Path 2: Download Standalone App File (NO ZIP) */}
               <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3 shadow-lg flex flex-col justify-between">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -1115,33 +1127,28 @@ git push -u origin main`}
                       <PackageCheck className="w-4 h-4 text-emerald-400" />
                       Methode 2: Direkt-Download
                     </span>
-                    <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold">
-                      .APK DATEI
+                    <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
+                      0% ZIP · EINZELDATEI
                     </span>
                   </div>
-                  <h3 className="text-sm font-bold text-white">pi-studio-0logik.apk</h3>
+                  <h3 className="text-sm font-bold text-white">Standalone Einzeldatei für Motorola 13</h3>
                   <p className="text-xs text-slate-300 font-mono leading-relaxed">
-                    Lädt die Standalone <code className="text-cyan-300">pi-studio-0logik.apk</code> direkt in den Motorola <strong>Downloads</strong>-Ordner herunter.
+                    Lädt eine <strong>vollständige, tragbare Einzel-App</strong> herunter. Kein ZIP-Archiv, kein Entpacken — direkt antippen und loslegen!
                   </p>
                 </div>
 
                 <div className="pt-2 flex flex-col gap-2">
-                  <button
-                    onClick={triggerApkDownload}
-                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-slate-950 font-mono text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition shadow-md active:scale-95"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>.APK Datei herunterladen</span>
-                  </button>
                   <a
-                    href="/api/export/pi-studio-0logik.apk"
-                    download="pi-studio-0logik.apk"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-center text-[10px] text-slate-400 hover:text-cyan-300 font-mono underline"
+                    href="/api/export/pi-studio-offline.html"
+                    download="pi-studio-offline.html"
+                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-slate-950 font-mono text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition shadow-md active:scale-95 text-center"
                   >
-                    Direktlink (falls Button blockiert wird)
+                    <Download className="w-4 h-4 shrink-0" />
+                    <span>📱 Standalone App laden (.html — KEIN ZIP)</span>
                   </a>
+                  <p className="text-[10px] text-slate-400 text-center leading-relaxed">
+                    Tippe diese Datei in deinem Motorola Downloads-Ordner an: Sie öffnet sich sofort im Vollbild ohne Installations-Fehler.
+                  </p>
                 </div>
               </div>
 
