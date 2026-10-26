@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PI Studio 0-Logik</string>
+    <string name="title_activity_main">PI Studio 0-Logik</string>
+    <string name="package_name">com.missgiver.pi0logik</string>
+    <string name="custom_url_scheme">com.missgiver.pi0logik</string>
+</resources>
