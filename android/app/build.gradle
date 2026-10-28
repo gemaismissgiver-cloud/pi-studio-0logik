@@ -16,10 +16,38 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            def keystoreFile = file("release-key.jks")
+            if (!keystoreFile.exists()) {
+                try {
+                    def keytoolCmd = ["keytool", "-genkeypair", "-v", "-keystore", keystoreFile.absolutePath, "-storepass", "pi0logikpass", "-alias", "pi0logik", "-keypass", "pi0logikpass", "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000", "-dname", "CN=PI Studio, OU=0Logik, O=PI, L=City, S=State, C=US"]
+                    def proc = keytoolCmd.execute()
+                    proc.waitFor()
+                } catch (Exception e) {
+                    logger.warn("Could not auto-generate release key: " + e.message)
+                }
+            }
+            if (keystoreFile.exists()) {
+                storeFile keystoreFile
+                storePassword "pi0logikpass"
+                keyAlias "pi0logik"
+                keyPassword "pi0logikpass"
+                v1SigningEnabled true
+                v2SigningEnabled true
+            } else {
+                storeFile file("debug.keystore")
+                storePassword "android"
+                keyAlias "androiddebugkey"
+                keyPassword "android"
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
 }
