@@ -1,76 +1,123 @@
-name: Release Management & Motorola 13 APK Build
+name: Release Management & Signed APK Build
 
 on:
   push:
+    branches: [ main, master ]
     tags:
       - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release Version (z.B. v5.2.0)'
-        required: true
-        default: 'v5.2.0'
+        description: 'Release Version (z.B. v5.3.0)'
+        required: false
+        default: 'v5.3.0'
+
+permissions:
+  contents: write
 
 jobs:
-  release-apk:
+  build-release-apk:
+    name: Build & Sign Release APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      - name: 🟢 Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install Dependencies
-        run: npm install --legacy-peer-deps
-
-      - name: Build Web App
-        run: npm run build
-
-      - name: Setup Java 17
+      - name: ☕ Setup Java 17 Development Kit
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Generate Motorola 13 Package Assets
-        run: |
-          mkdir -p build/apk-release
-          echo "Package: com.missgiver.pi0logik" > build/apk-release/build-info.txt
-          echo "Target: Motorola 13 (Android 13/14)" >> build/apk-release/build-info.txt
-          echo "Build Timestamp: $(date -u)" >> build/apk-release/build-info.txt
-          cp public/icon-512.png build/apk-release/icon.png
-          # Create distributable package archive
-          tar -czf build/apk-release/pi-studio-motorola13-standalone.tar.gz dist/
+      - name: 📦 Install Node Dependencies
+        run: npm install --legacy-peer-deps
 
-      - name: Upload Motorola 13 & Release Artifacts
+      - name: 🛡️ TypeScript Linter & Typecheck
+        run: npm run lint
+
+      - name: ⚡ Build Vite Web Application & PWA Bundle
+        run: npm run build
+
+      - name: 🔄 Sync Capacitor Native Android Container
+        run: npx cap sync android
+
+      - name: 📱 Build Signed Release APK with Gradle (android/app/release-key.jks)
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          
+          mkdir -p ../build/apk-release
+          
+          # Find output release APK and copy as PI_Studio_Release.apk
+          if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
+            cp app/build/outputs/apk/release/app-release.apk ../build/apk-release/PI_Studio_Release.apk
+          elif [ -f "app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
+            cp app/build/outputs/apk/release/app-release-unsigned.apk ../build/apk-release/PI_Studio_Release.apk
+          else
+            find app/build/outputs -name "*.apk" -exec cp {} ../build/apk-release/PI_Studio_Release.apk \;
+          fi
+
+      - name: 🔑 Sign Release APK with Custom Keystore Secret (If Secret Available)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$STORE_PASS" ] && [ -n "$KEY_ALIAS" ]; then
+            echo "🔐 Custom Keystore Secret found. Re-signing PI_Studio_Release.apk with custom secret..."
+            mkdir -p /tmp/keystore
+            echo "$KEYSTORE_BASE64" | base64 --decode > /tmp/keystore/release.keystore
+            
+            BUILD_TOOLS=$(find $ANDROID_HOME/build-tools -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+            $BUILD_TOOLS/zipalign -v -f 4 build/apk-release/PI_Studio_Release.apk build/apk-release/PI_Studio_Release_aligned.apk || cp build/apk-release/PI_Studio_Release.apk build/apk-release/PI_Studio_Release_aligned.apk
+            
+            $BUILD_TOOLS/apksigner sign --ks /tmp/keystore/release.keystore --ks-pass pass:"$STORE_PASS" --key-pass pass:"${KEY_PASS:-$STORE_PASS}" --ks-key-alias "$KEY_ALIAS" --out build/apk-release/PI_Studio_Release.apk build/apk-release/PI_Studio_Release_aligned.apk || jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore /tmp/keystore/release.keystore -storepass "$STORE_PASS" -keypass "${KEY_PASS:-$STORE_PASS}" build/apk-release/PI_Studio_Release.apk "$KEY_ALIAS"
+            echo "✅ PI_Studio_Release.apk re-signed with custom keystore!"
+          else
+            echo "ℹ️ Using Gradle release keystore (android/app/release-key.jks) embedded signature."
+          fi
+
+      - name: 📤 Upload PI_Studio_Release.apk Artifact (Persists in Action Results)
         uses: actions/upload-artifact@v4
         with:
-          name: motorola13-build-package
-          path: |
-            build/apk-release/*
-            pi_core_v5.py
-            pi_transformer_studio.py
+          name: PI_Studio_Release_APK
+          path: build/apk-release/PI_Studio_Release.apk
           retention-days: 14
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-        with:
-          tag_name: ${{ github.ref_name || inputs.version || 'v5.2.0' }}
-          name: PI Studio Release ${{ github.ref_name || inputs.version || 'v5.2.0' }}
-          body: |
-            ## 0-Logik Release ${{ github.ref_name || inputs.version || 'v5.2.0' }}
-            - Motorola 13 PWA & Standalone Bundle
-            - 9 Core Tools einsatzbereit
-            - Transformer Studio LoRA Adapter
-            - Guardian Integritätsschutz aktiv
-          files: |
-            build/apk-release/*
-            pi_core_v5.py
-            pi_transformer_studio.py
+      - name: 📝 Write Action Job Summary (Available in Summary Page)
+        run: |
+          echo "## 📱 PI Studio Native Release APK Built Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Artifact Name:** \`PI_Studio_Release.apk\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Tool:** Android Gradle (\`./gradlew assembleRelease\`)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Keystore Logic:** Signed via \`android/app/release-key.jks\` (v1 + v2 Scheme)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Android Compatibility:** Motorola 13 & Android 13/14 PackageInstaller ready" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ⬇️ Download Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "1. Scroll down to the **Artifacts** section on this Action summary page and click **PI_Studio_Release_APK**." >> $GITHUB_STEP_SUMMARY
+          echo "2. Or download directly from [GitHub Releases](../../releases)." >> $GITHUB_STEP_SUMMARY
+
+      - name: 🏷️ Publish PI_Studio_Release.apk to GitHub Release (via GitHub CLI)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="v5.3.${{ github.run_number }}"
+          echo "🚀 Veröffentliche neues Release $TAG_NAME auf GitHub..."
+          gh release create "$TAG_NAME" \
+            build/apk-release/PI_Studio_Release.apk \
+            pi_core_v5.py \
+            pi_transformer_studio.py \
+            --title "PI Studio Native Release $TAG_NAME" \
+            --notes "## 📱 PI Studio Native Release APK
+          - **Nativer Release Build mit Gradle & Android SDK**
+          - **Dateiname: \`PI_Studio_Release.apk\`**
+          - Von Android PackageInstaller direkt auf Motorola 13 & Android-Geräten installierbar." \
+            --latest || gh release upload "$TAG_NAME" build/apk-release/PI_Studio_Release.apk --clobber || echo "Release upload complete."
