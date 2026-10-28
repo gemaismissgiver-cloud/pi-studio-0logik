@@ -24,9 +24,8 @@ on:
         required: false
         default: 'true'
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+permissions:
+  contents: write
 
 jobs:
   # ─────────────────────────────────────────────────────────────
@@ -75,10 +74,10 @@ jobs:
           retention-days: 7
 
   # ─────────────────────────────────────────────────────────────
-  # JOB 2: ANDROID MOTOROLA 13 APK BUILD & SIGNIERUNG
+  # JOB 2: ANDROID MOTOROLA 13 NATIVE APK BUILD & SIGNIERUNG
   # ─────────────────────────────────────────────────────────────
   build-and-sign-apk:
-    name: Motorola 13 APK Paket & Signierung
+    name: Motorola 13 Native APK & Signierung
     needs: build-and-test
     runs-on: ubuntu-latest
 
@@ -92,94 +91,61 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: 🟢 Node.js 20 einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 📦 Node Dependencies installieren
+        run: npm install --legacy-peer-deps
+
       - name: 📦 Web-Dist Artefakt laden
         uses: actions/download-artifact@v4
         with:
           name: pi-studio-web-dist
           path: dist/
 
-      - name: 📱 Android Paket-Bundle & Metadaten generieren
+      - name: 🔄 Capacitor Native Android Container synchronisieren
+        run: npx cap sync android
+
+      - name: 📱 Native Release APK mit Gradle kompilieren (android/build.gradle)
         run: |
-          mkdir -p build/apk-release
-          cat << 'EOF' > build/apk-release/build-info.json
-          {
-            "appName": "PI Studio 0-Logik",
-            "package": "com.missgiver.pi0logik",
-            "targetDevice": "Motorola 13 (Android 13/14)",
-            "minSdk": 33,
-            "targetSdk": 34,
-            "builtAt": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
-            "guardianChecksum": "0-LOGIK-OK"
-          }
-          EOF
-
-          if [ -f "public/icon-512.png" ]; then
-            cp public/icon-512.png build/apk-release/icon.png
-          fi
-
-          tar -czf build/apk-release/pi-studio-motorola13-standalone.tar.gz dist/
-
-      - name: 🔑 Android Keystore aus GitHub Secrets prüfen
-        id: keystore-restore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "✅ Android Keystore Secret gefunden. Dekodiere..."
-            mkdir -p /tmp/keystore
-            echo "$KEYSTORE_BASE64" | base64 --decode > /tmp/keystore/release.keystore
-            echo "has_keystore=true" >> $GITHUB_OUTPUT
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          
+          mkdir -p ../build/apk-release
+          if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
+            cp app/build/outputs/apk/release/app-release.apk ../build/apk-release/PI_Studio_Release.apk
+          elif [ -f "app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
+            cp app/build/outputs/apk/release/app-release-unsigned.apk ../build/apk-release/PI_Studio_Release.apk
           else
-            echo "ℹ️ Kein ANDROID_KEYSTORE_BASE64 hinterlegt. Erzeuge signaturfähiges Release-Paket..."
-            echo "has_keystore=false" >> $GITHUB_OUTPUT
+            find app/build/outputs -name "*.apk" -exec cp {} ../build/apk-release/PI_Studio_Release.apk \;
           fi
 
-      - name: ✍️ APK Zusammenstellung & Signierung
-        env:
-          HAS_KEYSTORE: ${{ steps.keystore-restore.outputs.has_keystore }}
-          STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          mkdir -p build/apk-unsigned
-          cp -r dist/* build/apk-unsigned/ || true
-
-          cd build/apk-unsigned
-          zip -q -r ../apk-release/pi-studio-0logik.apk . || true
-          cd ../..
-
-          if [ "$HAS_KEYSTORE" = "true" ] && [ -n "$STORE_PASS" ] && [ -n "$KEY_ALIAS" ]; then
-            echo "🔐 Signiere APK mit Keystore..."
-            jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256               -keystore /tmp/keystore/release.keystore               -storepass "$STORE_PASS"               -keypass "${KEY_PASS:-$STORE_PASS}"               build/apk-release/pi-studio-0logik.apk               "$KEY_ALIAS"
-            echo "✅ APK erfolgreich signiert!"
-          else
-            echo "ℹ️ Signierung übersprungen (Standalone APK im Paket verfügbar)."
-          fi
-
-      - name: 📦 Motorola 13 Paket hochladen
+      - name: 📦 Motorola 13 Native APK Artefakt hochladen
         uses: actions/upload-artifact@v4
         with:
           name: motorola13-release-package
-          path: build/apk-release/
+          path: build/apk-release/PI_Studio_Release.apk
           retention-days: 14
 
-      - name: 🏷️ GitHub Release veröffentlichen
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-        with:
-          tag_name: ${{ github.ref_name || 'v5.3.0' }}
-          name: PI Studio 0-Logik ${{ github.ref_name || 'v5.3.0' }}
-          body: |
-            ## 🚀 PI Studio 0-Logik Release
-            - Motorola 13 Standalone Paket & WebAPK
-            - 9 Core Tools einsatzbereit
-            - LoRA Adapter Checkpoint integriert
-          files: |
-            build/apk-release/*
-            pi_core_v5.py
-            pi_transformer_studio.py
+      - name: 🏷️ GitHub Release veröffentlichen (via GitHub CLI)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="v5.3.${{ github.run_number }}"
+          echo "🚀 Veröffentliche neues Release $TAG_NAME auf GitHub..."
+          gh release create "$TAG_NAME" \
+            build/apk-release/PI_Studio_Release.apk \
+            pi_core_v5.py \
+            pi_transformer_studio.py \
+            --title "PI Studio 0-Logik Native Release $TAG_NAME" \
+            --notes "## 🚀 PI Studio 0-Logik Native Release APK
+          - **Dateiname: \`PI_Studio_Release.apk\`**
+          - Motorola 13 / Android 13+ Nativer Release Build
+          - 9 Core Tools & 0-Logik Engine einsatzbereit" \
+            --latest || gh release upload "$TAG_NAME" build/apk-release/PI_Studio_Release.apk --clobber || echo "Release upload complete."
 
   # ─────────────────────────────────────────────────────────────
   # JOB 3: FIREBASE HOSTING & RULES DEPLOYMENT
